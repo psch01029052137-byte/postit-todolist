@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Post-it Todo List</title>
+  <!-- Google Fonts: 감성적인 폰트 (Pretendard & Nanum Pen Script) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Gaegu:wght@400;700&family=Noto+Sans+KR:wght@300;400;500;700&display=swap" rel="stylesheet">
+  <!-- SortableJS CDN for mobile & desktop drag and drop -->
+  <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
+  <!-- FontAwesome for icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- Header / Controls Bar -->
+  <header class="app-header">
+    <div class="header-container">
+      <div class="logo-area">
+        <span class="logo-icon">📌</span>
+        <h1>Post-it Todo List</h1>
+      </div>
+      <div class="header-actions">
+        <!-- Game Success Trigger Button (.env.local NEXT_PUBLIC_GOOGLE_SCRIPT_URL 실행) -->
+        <button id="btn-game-success" class="btn-icon btn-game" title="게임 성공 시 구글 앱스 스크립트 실행">
+          <i class="fa-solid fa-gamepad"></i>
+          <span class="btn-text">게임 성공 기록</span>
+        </button>
+        <!-- Google Sheets Status / Settings Button -->
+        <button id="btn-sheet-settings" class="btn-icon" title="구글 시트 연동 설정">
+          <i class="fa-solid fa-table"></i>
+          <span class="sheet-status-dot" id="sheet-status-dot"></span>
+          <span class="btn-text">시트 연동</span>
+        </button>
+        <!-- Dark / Light Mode Toggle -->
+        <button id="btn-theme-toggle" class="btn-icon" title="다크/라이트 모드 전환" aria-label="테마 변경">
+          <i class="fa-solid fa-moon" id="theme-icon"></i>
+          <span class="btn-text" id="theme-text">다크 모드</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main class="main-content">
+    <!-- Memo Input Section (Centered) -->
+    <section class="memo-input-section">
+      <div class="postit-composer">
+        <div class="composer-pin">📌</div>
+        <form id="memo-form">
+          <div class="composer-header">
+            <label for="memo-category-select" class="sr-only">범주 선택</label>
+            <select id="memo-category-select" class="category-select" required>
+              <option value="" disabled selected>범주를 선택하세요</option>
+              <option value="할 일">📝 할 일</option>
+              <option value="아이디어">💡 아이디어</option>
+              <option value="기타">📌 기타</option>
+            </select>
+          </div>
+          <div class="composer-body">
+            <textarea id="memo-content-input" placeholder="메모할 내용을 입력하세요..." rows="3" required></textarea>
+          </div>
+          <div class="composer-footer">
+            <div class="color-preview-tag">
+              <span class="preview-dot" id="random-color-preview"></span>
+              <span class="preview-label">무작위 색상</span>
+            </div>
+            <button type="submit" id="btn-add-memo" class="btn-stick">
+              <i class="fa-solid fa-plus"></i> 메모 붙이기
+            </button>
+          </div>
+        </form>
+      </div>
+    </section>
+
+    <!-- Filter & Statistics Bar -->
+    <section class="memo-toolbar">
+      <div class="toolbar-left">
+        <div class="filter-wrapper">
+          <label for="category-filter"><i class="fa-solid fa-filter"></i> 카테고리 필터:</label>
+          <select id="category-filter" class="filter-dropdown">
+            <option value="전체">전체 보기</option>
+            <option value="할 일">할 일</option>
+            <option value="아이디어">아이디어</option>
+            <option value="기타">기타</option>
+          </select>
+        </div>
+      </div>
+      <div class="toolbar-right">
+        <div class="count-badge" id="memo-count-badge">총 0개 메모</div>
+        <button id="btn-sync-sheet" class="btn-subtle" title="구글 시트와 동기화">
+          <i class="fa-solid fa-rotate" id="sync-icon"></i> 동기화
+        </button>
+      </div>
+    </section>
+
+    <!-- Post-it Grid Area -->
+    <section class="memo-board-section">
+      <div id="memo-grid" class="memo-grid">
+        <!-- Post-it memo cards will be inserted here dynamically -->
+      </div>
+      <!-- Empty State -->
+      <div id="empty-state" class="empty-state hidden">
+        <div class="empty-icon">📝</div>
+        <p class="empty-title">작성된 메모가 없습니다</p>
+        <p class="empty-desc">위 입력창에서 범주를 선택하고 내용을 적어 메모를 붙여보세요!</p>
+      </div>
+    </section>
+  </main>
+
+  <!-- Edit Modal -->
+  <div id="edit-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="edit-modal-title">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 id="edit-modal-title"><i class="fa-solid fa-pen-to-square"></i> 메모 수정</h3>
+        <button type="button" class="btn-modal-close" id="btn-close-edit">&times;</button>
+      </div>
+      <form id="edit-form">
+        <input type="hidden" id="edit-memo-id">
+        <div class="form-group">
+          <label for="edit-category">카테고리</label>
+          <select id="edit-category" class="form-control" required>
+            <option value="할 일">📝 할 일</option>
+            <option value="아이디어">💡 아이디어</option>
+            <option value="기타">📌 기타</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="edit-content">메모 내용</label>
+          <textarea id="edit-content" class="form-control" rows="4" required></textarea>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn-secondary" id="btn-cancel-edit">취소</button>
+          <button type="submit" class="btn-primary" id="btn-save-edit">저장하기</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Google Sheets Settings Modal -->
+  <div id="sheet-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="sheet-modal-title">
+    <div class="modal-card sheet-modal-card">
+      <div class="modal-header">
+        <h3 id="sheet-modal-title"><i class="fa-solid fa-sheet-plastic"></i> 구글 시트 연동 설정</h3>
+        <button type="button" class="btn-modal-close" id="btn-close-sheet">&times;</button>
+      </div>
+      <div class="sheet-modal-body">
+        <p class="sheet-guide-desc">
+          구글 스프레드시트의 <strong>Google Apps Script 웹 앱 URL</strong>을 등록하면 모든 메모의 생성, 수정, 삭제, 완료 체크가 실시간으로 구글 시트에 기록됩니다.
+        </p>
+        
+        <div class="form-group">
+          <label for="sheet-web-app-url">웹 앱 배포 URL (Web App URL):</label>
+          <input type="url" id="sheet-web-app-url" class="form-control" placeholder="https://script.google.com/macros/s/.../exec">
+          <small class="help-text">※ 배포 시 '액세스 권한: 모든 사용자(Anyone)'로 배포해야 합니다.</small>
+        </div>
+
+        <div class="sheet-info-box">
+          <h4><i class="fa-solid fa-circle-info"></i> 구글 시트 열 구조 (7개 열 자동 인식):</h4>
+          <ol class="column-list">
+            <li><strong>A열 (timestamp)</strong>: 시트기록날짜및시간</li>
+            <li><strong>B열 (datetime)</strong>: 메모생성날짜및시간 (고유키)</li>
+            <li><strong>C열 (category)</strong>: 메모범주</li>
+            <li><strong>D열 (content)</strong>: 메모내용</li>
+            <li><strong>E열 (color)</strong>: 메모색상 (1:노랑, 2:분홍, 3:초록, 4:파랑)</li>
+            <li><strong>F열 (state)</strong>: 완료 상태 ('체크' 또는 '미완료')</li>
+            <li><strong>G열 (order)</strong>: 메모 순서 (숫자)</li>
+          </ol>
+        </div>
+
+        <div class="sheet-action-row">
+          <button type="button" id="btn-test-sheet" class="btn-secondary">
+            <i class="fa-solid fa-link"></i> 연결 테스트 및 데이터 불러오기
+          </button>
+          <button type="button" id="btn-save-sheet-url" class="btn-primary">
+            <i class="fa-solid fa-floppy-disk"></i> 설정 저장
+          </button>
+        </div>
+
+        <div id="sheet-status-message" class="sheet-status-msg"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notification Container -->
+  <div id="toast-container" class="toast-container" aria-live="polite"></div>
+
+  <!-- Footer -->
+  <footer class="app-footer">
+    <div class="footer-container">
+      <p>Copyright INU Post-it Todo List by OOO</p>
+    </div>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>
